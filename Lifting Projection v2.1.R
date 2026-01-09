@@ -2,24 +2,44 @@
 ### Goals and Progress ###
 ##########################
 
-# Load packages
+###
+### Download Required Packages
+### 
+if(!require(tidyverse))  install.packages("tidyverse",  repos = "http://cran.us.r-project.org")
 if(!require(Hmisc))  install.packages("Hmisc",  repos = "http://cran.us.r-project.org")
 if(!require(readxl)) install.packages("readxl", repos = "http://cran.us.r-project.org")
+if(!require(googlesheets4)) install.packages("googlesheets4", repos = "http://cran.us.r-project.org")
+
+########################
+### Set Lifting Goal ###
+########################
+
+lift   <- "barbell_squat" 
+        # "barbell_squat" | "barbell_bench_press" | "deadlift"
+reps   <- "1_rep_max"     
+        # "1_rep_max" | "3_rep_max" | "10_rep_max"
+weight <- 400             
+        # Goal weight in lbs (at 'reps' above)
+date   <- as.Date("2026-07-31") 
+        # Set goal date (YYYY-MM-DD)
 
 ###
-### Set Lifting Goal
+### Add file locations
 ###
 
-lift   <- "barbell_squat" # "barbell_squat" "barbell_bench_press" "deadlift"
-reps   <- "1_rep_max" # "1_rep_max" | "3_rep_max" | "10_rep_max"
-weight <- 400 # goal weight in lbs (at 'reps' above)
-date   <- as.Date("2025-12-31") # goal date "2025-12-31"
+### Workout log excel file
+# workout_log_xlsx <- "~/workout_log.xlsx" #~/workout_log.xlsx
 
-# Workout log file location
-workout_log_file <-  #~/workout_log.xlsx
+### Workout log google sheet
+# Use the sheet generated from responses to the following survey:
+# https://docs.google.com/forms/d/e/1FAIpQLSeTVY4Df98JANqC5RlyLEft-xDz8GCLKLUVgGjqq-2UAhWkdQ/viewform?usp=sharing&ouid=110422957884271136845
+gs4_deauth()
 
-# Plot file output directory
-output_dir <-  # "~/plots"
+# Read directly from the google sheet URL share link
+workout_log_sheet <- read_sheet("https://docs.google.com/spreadsheets/")
+
+### Plot file output directory
+output_dir <- "~/plots" # "~/plots" for plots folder
 
 # Plot file name
 file_name <- paste0(
@@ -37,18 +57,38 @@ file_path <- file.path(output_dir, file_name)
 ### Data
 ###
 
-# Read workout log
-workout_log <- read_excel(workout_log_file, sheet = "lifting")
+# Read workout log from Excel
+#workout_log_file <- read_excel(workout_log_xlsx, sheet = "lifting")
 
-stopifnot(file.exists(path.expand(workout_log_file)))
+#stopifnot(file.exists(path.expand(workout_log_xlsx)))
 
-required_cols <- c("lift","reps","weight_lbs","date")
-missing <- setdiff(required_cols, names(workout_log))
-if (length(missing)) stop("Missing columns in 'lifting' sheet: ", paste(missing, collapse=", "))
+#required_cols <- c("lift","reps","weight_lbs","date")
+#missing <- setdiff(required_cols, names(workout_log_file))
+#if (length(missing)) stop("Missing columns in 'lifting' sheet: ", paste(missing, collapse=", "))
 
-workout_log$date       <- as.Date(workout_log$date)
+#workout_log_file$date       <- as.Date(workout_log_file$date)
 
-workout_log$weight_lbs <- suppressWarnings(as.numeric(workout_log$weight_lbs))
+#workout_log_file$weight_lbs <- suppressWarnings(as.numeric(workout_log_file$weight_lbs))
+
+# Use Google Sheet Log
+workout_log_sheet <- workout_log_sheet %>%
+  rename(
+    timestamp   = Timestamp,
+    date        = `Date and Time of Workout`,
+    lift        = `Select the Type of Lift/Exercise`,
+    reps        = `Number of Reps`,
+    weight_lbs  = `Weight Lifted (in lbs)`
+  )
+
+workout_log_sheet <- workout_log_sheet %>%
+  mutate(
+    lift = tolower(lift) %>% gsub("[^a-z0-9]+", "_", .),
+    reps = tolower(reps) %>% gsub("[^a-z0-9]+", "_", .),
+    date = as.Date(date),
+    weight_lbs = as.numeric(weight_lbs)
+  )
+
+workout_log <- workout_log_sheet
 
 # Epley conversions
 est_1rm  <- function(w, reps) w * (1 + reps/30)             # set -> 1RM
@@ -203,8 +243,8 @@ build_rep_block <- function(wlog, lift_id, reps_n, goal_1rm, goal_date) {
 # - step_round: set to 2.5 to snap to plates, NULL to skip
 adjust_projection <- function(block, goal_wt,
                               k_actual = 3, 
-                              mult = 1,
-                              max_step_abs = Inf,
+                              mult = 0.85,
+                              max_step_abs = 25,
                               min_step = 0,
                               step_round = NULL,
                               today_date = Sys.Date()) {
@@ -291,9 +331,9 @@ g3  <- est_nrm(g1, 3)
 g10 <- est_nrm(g1, 10)
 
 # Monotone, capped, and plate-rounded adjustment to today's projection
-lift_max1  <- adjust_projection(lift_max1,  goal_wt = g1,  k_actual = 3, mult = 1, min_step = 0, step_round = NULL)
-lift_max3  <- adjust_projection(lift_max3,  goal_wt = g3,  k_actual = 3, mult = 1, min_step = 0, step_round = NULL)
-lift_max10 <- adjust_projection(lift_max10, goal_wt = g10, k_actual = 3, mult = 1, min_step = 0, step_round = NULL)
+lift_max1  <- adjust_projection(lift_max1,  goal_wt = g1,  k_actual = 3, mult = .85, min_step = 0, step_round = NULL)
+lift_max3  <- adjust_projection(lift_max3,  goal_wt = g3,  k_actual = 3, mult = .85, min_step = 0, step_round = NULL)
+lift_max10 <- adjust_projection(lift_max10, goal_wt = g10, k_actual = 3, mult = .85, min_step = 0, step_round = NULL)
 
 
 # grab today's projections (fallback to nearest prior date if today not present)
@@ -315,6 +355,80 @@ get_today <- function(df) {
 pt1  <- get_today(lift_max1)
 pt3  <- get_today(lift_max3)
 pt10 <- get_today(lift_max10)
+
+###
+### Plot
+###
+
+###
+### Plot predicted vs Actual for selected lift
+###
+ymin <- min(c(lift_max1$weight_lbs, lift_max3$weight_lbs, lift_max10$weight_lbs,
+              lift_max1$predicted,  lift_max3$predicted,  lift_max10$predicted), na.rm = TRUE) - 50
+ymax <- max(c(g1, lift_max1$predicted, lift_max3$predicted, lift_max10$predicted), na.rm = TRUE) + 50
+
+plot(lift_max1$date, lift_max1$weight_lbs, 
+     col = "white",
+     ylim = c(ymin, ymax),
+     main = paste0(plot_name(lift), " Goal Progression: Actual vs Projected"),
+     xlab = "Date", ylab = "Weight lbs")
+
+grid(nx = NULL, ny = NULL, lty = 1, col = "gray", lwd = .5)
+
+lines(lift_max1$date,  lift_max1$predicted,  type = "l", lty = 1, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+lines(lift_max3$date,  lift_max3$predicted,  type = "l", lty = 5, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+lines(lift_max10$date, lift_max10$predicted, type = "l", lty = 3, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+
+lines(lift_max1_actual$date,  lift_max1_actual$weight_lbs,  type = "o", lty = 1, lwd = 2, pch = 19, cex = .5, col = "black")
+lines(lift_max3_actual$date,  lift_max3_actual$weight_lbs,  type = "o", lty = 5, lwd = 2, pch = 19, cex = .5, col = "black")
+lines(lift_max10_actual$date, lift_max10_actual$weight_lbs, type = "o", lty = 3, lwd = 2, pch = 19, cex = .5, col = "black")
+
+points(today, pt1,  pch = 19, cex = 1, col = "firebrick")
+points(today, pt3,  pch = 19, cex = 1, col = "firebrick")
+points(today, pt10, pch = 19, cex = 1, col = "firebrick")
+
+points(gdate, g1,   pch = 15, cex = 1, col = "forestgreen")
+points(gdate, g3,   pch = 15, cex = 1, col = "forestgreen")
+points(gdate, g10,  pch = 15, cex = 1, col = "forestgreen")
+
+# Days remaining and days since last workout legend
+days_remaining   <- as.numeric(as.Date(date) - Sys.Date())
+last_workout_date <- max(workout_log[workout_log$lift == lift, "date", drop = TRUE], na.rm = TRUE)
+days_since_last   <- as.numeric(Sys.Date() - as.Date(last_workout_date))
+
+legend("topleft",
+       legend = c(paste0("Days Since Last Workout: ", days_since_last),
+                  paste0("Days Until Goal: ",       days_remaining)),
+       text.col = "black", cex = 0.9, bty = "n")
+
+# last, projected, and goal weights (rounded up to nearest 2.5 lb)
+round_up_2p5 <- function(x) {
+  ifelse(is.na(x), NA, ceiling(x / 2.5) * 2.5)
+}
+
+last1  <- tail(na.omit(lift_max1_actual$weight_lbs), 1)
+last3  <- tail(na.omit(lift_max3_actual$weight_lbs), 1)
+last10 <- tail(na.omit(lift_max10_actual$weight_lbs), 1)
+
+legend_table <- data.frame(
+  "Last Lift (lb)"       = c(round_up_2p5(last1), round_up_2p5(last3), round_up_2p5(last10)),
+  "Projected Today (lb)" = c(round_up_2p5(pt1),   round_up_2p5(pt3),   round_up_2p5(pt10)),
+  "Goal (lb)"            = c(round_up_2p5(g1),    round_up_2p5(g3),    round_up_2p5(g10))
+)
+
+legend_labels <- apply(legend_table, 1, function(row)
+  sprintf("%8s  %8s  %8s", row[1], row[2], row[3])
+)
+
+legend("bottomright",
+       legend = c("    Last:   Today:    Goal:  ", legend_labels),
+       text.col = "black", cex = 0.9, bty = "n")
+
+legend("bottom",
+       legend = c("  1 Rep:", "  3 Rep:", " 10 Rep:"),
+       col    = rep("black", 3),
+       lty    = c(1,5,3), lwd = rep(1, 3),
+       cex = 0.9, bty = "n")
 
 # Open a PNG graphics device
  png(filename = file_path, width = 1200, height = 960, res = 180)
