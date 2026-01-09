@@ -35,35 +35,49 @@ target_type         <- c("Chest")
 intensity_name      <- "Medium"
                  #From: Easy, Medium, Hard, Heavy, Light, Quick
 
-# Workout table file destination
-output_dir <-  "~/downloads"
+###
+### Add file locations
+###
 
-# Table file name
+### Set workout table file destination (for viewing)
+table_destination_html <- "~/folder/workout_dtable.html"
+
+### Set workout log file directory (for tracking daily workouts)
+output_dir <- "~/folder/workout logs"
+
+# For display/output collapse target type if a vector
+target_type_single <- paste(target_type, collapse = "_")
+
+# Name text log file
 file_name <- paste0(
-  "Workout_",
-  target_type, "_", 
+  target_type_single, "_", 
   intensity_name, "_", 
   format(Sys.Date(), "%Y-%m-%d"),
-  ".html")
+  "_Manual.txt")
 
 # Full file path
-table_destination_html <- file.path(output_dir, file_name)
+file_path <- file.path(output_dir, file_name) 
+
+######################
+###  Workout Setup ###
+######################
 
 ###
 ### Type of Workout
 ###
+
 exercise_lib <- tribble(
   ~exercise,                     ~type,                                         ~role,             ~equipment,                                  ~category,
   
   # Warmup / Conditioning
-  "Battle Rope",                 list("Conditioning"),                          list("multi"),     list("battle rope"),                          list("warmup","power"),
-  "Speed Rope / Double Unders",  list("Conditioning"),                          list("multi"),     list("jump rope"),                            list("warmup","cardio"),
-  "Heavy Jump Rope",             list("Conditioning"),                          list("multi"),     list("heavy rope"),                           list("warmup","cardio"),
-  "Burpees",                     list("Conditioning"),                          list("multi"),     list("none"),                                 list("warmup","cardio"),
-  "Boxing",                      list("Conditioning"),                          list("multi"),     list("gloves"),                               list("cardio","power"),
-  "Biking",                      list("Conditioning"),                          list("multi"),     list("bike"),                                 list("cardio","endurance"),
-  "Rowing",                      list("Conditioning"),                          list("multi"),     list("rowing machine"),                       list("cardio","endurance"),
-  "Jogging",                     list("Conditioning"),                          list("multi"),     list("none"),                                 list("cardio","endurance"),
+  "Battle Rope",                 list("Conditioning"),                          list("multi"),     list("battle_rope"),                          list("warmup","power"),
+  "Speed Rope / Double Unders",  list("Conditioning"),                          list("multi"),     list("jump_rope"),                            list("warmup","speed"),
+  "Heavy Jump Rope",             list("Conditioning"),                          list("multi"),     list("heavy_rope"),                           list("warmup","power"),
+  "Burpees",                     list("Conditioning"),                          list("multi"),     list("none"),                                 list("warmup","power"),
+  "Boxing",                      list("Conditioning"),                          list("multi"),     list("gloves"),                               list("warmup","power"),
+  "Biking",                      list("Conditioning"),                          list("multi"),     list("bike"),                                 list("cardio","warmup"),
+  "Rowing",                      list("Conditioning"),                          list("multi"),     list("rowing_machine"),                       list("cardio","endurance"),
+  "Jogging",                     list("Conditioning"),                          list("multi"),     list("none"),                                 list("warmup"),
   "Running",                     list("Conditioning"),                          list("multi"),     list("none"),                                 list("cardio","endurance"),
   
   # Core
@@ -73,13 +87,13 @@ exercise_lib <- tribble(
   "Sit Ups",                     list("Core"),                                  list("secondary"), list("none"),                                 list("core","isolation"),
   "V Sit Ups",                   list("Core"),                                  list("secondary"), list("none"),                                 list("core","isolation"),
   "Bicycles",                    list("Core"),                                  list("secondary"), list("none"),                                 list("core","isolation"),
-  "Mountain Climbers",           list("Core"),                                  list("multi"),     list("none"),                                 list("core","cardio"),
+  "Mountain Climbers",           list("Core"),                                  list("multi"),     list("none"),                                 list("core","rotation"),
   "Kettlebell Russian Twists",   list("Core"),                                  list("secondary"), list("kettlebell","dumbbell"),                list("core","rotation"),
   "Wood Splitters",              list("Core"),                                  list("secondary"), list("cable","bands"),                         list("core","rotation"),
   "Reverse Crunches",            list("Core"),                                  list("secondary"), list("none"),                                 list("core","isolation"),
   "Hanging Leg Raises",          list("Core"),                                  list("primary"),   list("bar"),                                  list("core","hip_flexion"),
   "Leg Lifts to Flutter Kicks",  list("Core"),                                  list("secondary"), list("none"),                                 list("core","isolation"),
-  "Kettlebell Swings",           list("Full Body","Back","Pull"),               list("compound"),  list("kettlebell"),                           list("power","conditioning"),
+  "Kettlebell Swings",           list("Core","Full Body","Back","Pull"),        list("compound"),  list("kettlebell"),                           list("power","conditioning"),
   
   # Chest / Push
   "Barbell Bench Press",         list("Chest","Push"),                          list("compound"),  list("barbell","bench"),                     list("strength"),
@@ -118,10 +132,10 @@ exercise_lib <- tribble(
   "Dumbbell Shrugs",             list("Back","Shoulders"),                      list("secondary"), list("dumbbell"),                            list("traps","isolation"),
   
   # Arms (Biceps/Triceps)
-  "Barbell Curls",               list("Arms","Bicep","Pull"),                   list("primary"),   list("barbell"),                              list("hypertrophy"),
-  "EZ Bar Curls",                list("Arms","Bicep","Pull"),                   list("primary"),   list("ez_bar"),                               list("hypertrophy"),
-  "Wide EZ Bar Curls",           list("Arms","Bicep","Pull"),                   list("primary"),   list("ez_bar"),                               list("hypertrophy"),
-  "Dumbbell Hammer Curls",       list("Arms","Bicep","Pull"),                   list("primary"),   list("dumbbell"),                             list("hypertrophy"),
+  "Barbell Curls",               list("Arms","Bicep","Pull"),                   list("primary","compound"),   list("barbell"),                              list("hypertrophy"),
+  "EZ Bar Curls",                list("Arms","Bicep","Pull"),                   list("primary","compound"),   list("ez_bar"),                               list("hypertrophy"),
+  "Wide EZ Bar Curls",           list("Arms","Bicep","Pull"),                   list("primary"),              list("ez_bar"),                               list("hypertrophy"),
+  "Dumbbell Curls",              list("Arms","Bicep","Pull"),                   list("primary","compound"),   list("dumbbell"),                             list("hypertrophy"),
   "EZ Bar Preacher Curls",       list("Arms","Bicep","Pull"),                   list("primary"),   list("ez_bar","bench"),                       list("hypertrophy"),
   "Close EZ Bar Curls",          list("Arms","Bicep","Pull"),                   list("secondary"), list("ez_bar"),                               list("hypertrophy"),
   "Reverse Barbell Curls",       list("Arms","Bicep","Pull","Forearms"),        list("secondary"), list("barbell"),                              list("hypertrophy"),
@@ -139,7 +153,7 @@ exercise_lib <- tribble(
   "Deadlifts",                   list("Legs","Back","Pull","Full Body"),        list("compound"),  list("barbell"),                              list("strength"),
   "Barbell Hip-Thrusts",         list("Legs","Push"),                           list("compound"),  list("barbell","bench"),                      list("glutes","strength"),
   "Bulgarian Split Squat",       list("Legs","Push","Balance"),                 list("primary"),   list("dumbbell","none","bench"),              list("hypertrophy","balance"),
-  "Single Dumbbell Cleans",       list("Full Body","Legs","Pull"),               list("primary"),   list("dumbbell"),                             list("power"),
+  "Single Dumbbell Cleans",       list("Full Body","Legs","Pull"),              list("primary"),   list("dumbbell"),                             list("power"),
   "Zercher Squat",               list("Legs","Push"),                           list("primary"),   list("barbell"),                              list("strength"),
   "Leg Extensions",              list("Legs","Push"),                           list("secondary"), list("machine"),                              list("isolation"),
   "Quad Curls",                  list("Legs","Push"),                           list("secondary"), list("machine"),                              list("isolation"),
@@ -148,12 +162,9 @@ exercise_lib <- tribble(
   "Kneel to Squat Jump",         list("Legs","Full Body"),                      list("secondary"), list("none"),                                 list("plyometric"),
   "Lunge Hinges",                list("Legs","Push"),                           list("primary"),   list("dumbbell","none"),                      list("hypertrophy"),
   "Goblet Squat",                list("Legs","Push"),                           list("secondary"), list("dumbbell","kettlebell"),                list("technique","hypertrophy"),
-  "Squat Pulses",                list("Legs","Push"),                           list("secondary"), list("none"),                                 list("burnout"),
   "Pistol Squat",                list("Legs","Push","Balance"),                 list("primary"),   list("none"),                                 list("skill","balance"),
   "Dumbbell Deadlifts",          list("Legs","Back","Pull"),                    list("primary"),   list("dumbbell"),                             list("strength"),
-  "Alternating Light Lunges",    list("Legs","Push"),                           list("secondary"), list("none","dumbbell"),                      list("conditioning"),
   "Dumbbell Squat Press",        list("Full Body","Push"),                      list("primary"),   list("dumbbell"),                             list("power","conditioning"),
-  "Banded Squats",               list("Legs","Push"),                           list("secondary"), list("bands"),                                 list("activation"),
   
   # Push (additional)
   "Landmine Press",              list("Push","Shoulders","Chest"),              list("primary"),   list("barbell","landmine"),                   list("strength","shoulders"),
@@ -231,12 +242,11 @@ intensity_list <- list(
   Quick = Quick
 )
 
-intensity_list <- list(Easy=Easy, Medium=Medium, Hard=Hard, Heavy=Heavy, Light=Light, Quick=Quick)
-
 ###########################################
 ### Workout builder using tagged library ###
 ###########################################
-# Helper: sample 'n' unique items safely from a vector (≤ length)
+
+# sample 'n' unique items safely from a vector (≤ length)
 sample_unique <- function(x, n) {
   x <- unique(stats::na.omit(x))
   if (length(x) == 0) return(character(0))
@@ -256,7 +266,7 @@ Workout <- function(exercise_lib,
   N <- length(intensity_vec)
   
   # Normalize target_type (vector ok)
-  target_type <- as.character(target_type)
+  target_type <- as.character(target_type_single)
   
   # Optional equipment filtering
   lib_filt <- exercise_lib
@@ -331,7 +341,7 @@ Workout <- function(exercise_lib,
     "Final Compound Lift (To Failure)",
     "Core One (Superset)",
     "Core Two (Superset)",
-    "Conditioning/Warmdown"
+    "Conditioning"
   )
   
   tibble(
@@ -341,26 +351,88 @@ Workout <- function(exercise_lib,
   )
 }
 
-######################
-### Generate workout
-######################
+########################
+### Generate workout ###
+########################
 
 Workout_output <- Workout(
   exercise_lib = exercise_lib,
   intensity_name = intensity_name,
-  target_type = target_type,                 # can be vector, e.g., c("Chest","Push")
-  available_equipment = available_equipment  # filters library by equipment tags
+  target_type = target_type,                 
+  available_equipment = available_equipment
 )
 
-####################
+#####################
 ### Create Table  ###
-####################
-stargazer(Workout_output, type = "text", title="Today's Workout", summary = FALSE, out = "Workout_table.txt")
+#####################
+
+type <- list(type = paste(target_type, collapse = "/"))
+intensity <- list(intensity = intensity_name)
+
+workout_title <- paste0(
+  "Today's Workout: ", 
+  type$type, " ", 
+  intensity$intensity, " ",
+  format(Sys.Date(), "%Y-%m-%d"))
+
+stargazer(Workout_output, type = "text", title= workout_title, summary = FALSE, out = file_path)
 
 dtable <- datatable(
   Workout_output,
   options = list(pageLength = length(Workout_output$Workout), autoWidth = TRUE)
 )
 
+dtable <- datatable(Workout_output, options = list(
+  pageLength = 25, autoWidth = TRUE
+))
+
 htmlwidgets::saveWidget(dtable, table_destination_html)
-cat("Saved to: ", table_destination_html, "\n")
+
+###
+### Previous Workouts (Stargazer)
+###
+
+# Read ALL log filenames, most recent first
+log_files_all <- list.files(output_dir, pattern = "\\.txt$", full.names = TRUE)
+log_files_all <- log_files_all[order(file.info(log_files_all)$mtime, decreasing = TRUE)]
+
+# Parse filename: TYPE[_TYPE]_INTENSITY_YYYY-MM-DD_[TAG].txt
+parse_log <- function(path) {
+  name  <- tools::file_path_sans_ext(basename(path))
+  parts <- strsplit(name, "_", fixed = TRUE)[[1]]
+  
+  # Locate date token explicitly
+  date_idx <- grep("^\\d{4}-\\d{2}-\\d{2}$", parts)
+  
+  if (length(date_idx) != 1 || date_idx < 2) {
+    return(tibble(
+      Type = NA_character_,
+      Intensity = NA_character_,
+      Date = as.Date(NA),
+      Source = NA_character_
+    ))
+  }
+  
+  tibble(
+    Type      = paste(parts[seq_len(date_idx - 2)], collapse = "_"),
+    Intensity = parts[date_idx - 1],
+    Date      = as.Date(parts[date_idx]),
+    Source    = if (date_idx < length(parts))
+      paste(parts[(date_idx + 1):length(parts)], collapse = "_")
+    else ""
+  )
+}
+
+# Build workout history table
+workout_history <- dplyr::bind_rows(lapply(log_files_all, parse_log))
+
+# Format date as dd/mm/yyyy for display
+workout_history$Date <- format(workout_history$Date, "%d/%m/%Y")
+
+# Output as text table (same style as Workout_output)
+stargazer(
+  workout_history,
+  type = "text",
+  title = "Workout History",
+  summary = FALSE
+)
