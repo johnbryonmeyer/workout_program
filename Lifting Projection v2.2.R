@@ -149,11 +149,20 @@ build_rep_block <- function(wlog, lift_id, reps_n, goal_1rm, goal_date) {
   n_actual <- sum(is.finite(actual$weight_lbs))
   
   # today placeholder
-  today_row <- data.frame(lift = lift_id,
-                          reps = reps_lab,
-                          weight_lbs = NA_real_,
-                          date = Sys.Date())
-  block <- rbind(actual, today_row)
+  # today placeholder
+  # If we already have an observed lift for today, do NOT add the placeholder row.
+  has_today_observed <- any(is.finite(actual$weight_lbs) & actual$date == Sys.Date())
+  
+  if (has_today_observed) {
+    block <- actual
+  } else {
+    today_row <- data.frame(lift = lift_id,
+                            reps = reps_lab,
+                            weight_lbs = NA_real_,
+                            date = Sys.Date())
+    block <- rbind(actual, today_row)
+  }
+  
   
   # lags & engineered features
   block$weight_lag1   <- Lag(block$weight_lbs, +1)
@@ -319,6 +328,13 @@ lift_max1_actual  <- workout_log[workout_log$lift == lift & workout_log$reps == 
 lift_max3_actual  <- workout_log[workout_log$lift == lift & workout_log$reps == "3_rep_max", ]
 lift_max10_actual <- workout_log[workout_log$lift == lift & workout_log$reps == "10_rep_max", ]
 
+# If there is observed data today, do not show the red projected "today" points
+has_today_1  <- any(is.finite(lift_max1_actual$weight_lbs)  & as.Date(lift_max1_actual$date)  == Sys.Date())
+has_today_3  <- any(is.finite(lift_max3_actual$weight_lbs)  & as.Date(lift_max3_actual$date)  == Sys.Date())
+has_today_10 <- any(is.finite(lift_max10_actual$weight_lbs) & as.Date(lift_max10_actual$date) == Sys.Date())
+
+show_today_projection <- !(has_today_1 | has_today_3 | has_today_10)
+
 ###
 ### Current Projection
 ###
@@ -331,13 +347,16 @@ g3  <- est_nrm(g1, 3)
 g10 <- est_nrm(g1, 10)
 
 # Monotone, capped, and plate-rounded adjustment to today's projection
-lift_max1  <- adjust_projection(lift_max1,  goal_wt = g1,  k_actual = 3, mult = .85, min_step = 0, step_round = NULL)
-lift_max3  <- adjust_projection(lift_max3,  goal_wt = g3,  k_actual = 3, mult = .85, min_step = 0, step_round = NULL)
-lift_max10 <- adjust_projection(lift_max10, goal_wt = g10, k_actual = 3, mult = .85, min_step = 0, step_round = NULL)
+lift_max1  <- adjust_projection(lift_max1,  goal_wt = g1,  k_actual = 3, mult = 0.75, min_step = 0, step_round = NULL)
+lift_max3  <- adjust_projection(lift_max3,  goal_wt = g3,  k_actual = 3, mult = 0.75, min_step = 0, step_round = NULL)
+lift_max10 <- adjust_projection(lift_max10, goal_wt = g10, k_actual = 3, mult = 0.75, min_step = 0, step_round = NULL)
 
 
 # grab today's projections (fallback to nearest prior date if today not present)
 get_today <- function(df) {
+  # If we are not showing projections for today, return NA (so no red point)
+  if (!show_today_projection) return(NA_real_)
+  
   # find rows matching today's date
   idx <- which(as.Date(df$date) == today)
   # if no exact match, use the latest date before today
@@ -351,6 +370,7 @@ get_today <- function(df) {
   
   as.numeric(df$predicted[idx])
 }
+
 
 pt1  <- get_today(lift_max1)
 pt3  <- get_today(lift_max3)
@@ -383,45 +403,88 @@ lines(lift_max1_actual$date,  lift_max1_actual$weight_lbs,  type = "o", lty = 1,
 lines(lift_max3_actual$date,  lift_max3_actual$weight_lbs,  type = "o", lty = 5, lwd = 2, pch = 19, cex = .5, col = "black")
 lines(lift_max10_actual$date, lift_max10_actual$weight_lbs, type = "o", lty = 3, lwd = 2, pch = 19, cex = .5, col = "black")
 
-points(today, pt1,  pch = 19, cex = 1, col = "firebrick")
-points(today, pt3,  pch = 19, cex = 1, col = "firebrick")
-points(today, pt10, pch = 19, cex = 1, col = "firebrick")
+if (show_today_projection) {
+  points(today, pt1,  pch = 19, cex = 1, col = "firebrick")
+  points(today, pt3,  pch = 19, cex = 1, col = "firebrick")
+  points(today, pt10, pch = 19, cex = 1, col = "firebrick")
+}
 
 points(gdate, g1,   pch = 15, cex = 1, col = "forestgreen")
 points(gdate, g3,   pch = 15, cex = 1, col = "forestgreen")
 points(gdate, g10,  pch = 15, cex = 1, col = "forestgreen")
 
-# Days remaining and days since last workout legend
-days_remaining   <- as.numeric(as.Date(date) - Sys.Date())
+# Days remaining and Days Since Last Recorded Workout legend
+days_remaining    <- as.numeric(as.Date(date) - Sys.Date())
 last_workout_date <- max(workout_log[workout_log$lift == lift, "date", drop = TRUE], na.rm = TRUE)
 days_since_last   <- as.numeric(Sys.Date() - as.Date(last_workout_date))
 
+days_since_label <- if (!is.finite(days_since_last)) {
+  "NA"
+} else if (days_since_last == 0) {
+  "Today"
+} else {
+  as.character(days_since_last)
+}
+
 legend("topleft",
-       legend = c(paste0("Days Since Last Workout: ", days_since_last),
+       legend = c(paste0("Days Since Last Recorded Workout: ", days_since_label),
                   paste0("Days Until Goal: ",       days_remaining)),
        text.col = "black", cex = 0.9, bty = "n")
 
-# last, projected, and goal weights (rounded up to nearest 2.5 lb)
+# last, today (observed OR projected), and goal weights (rounded up to nearest 2.5 lb)
 round_up_2p5 <- function(x) {
   ifelse(is.na(x), NA, ceiling(x / 2.5) * 2.5)
 }
 
-last1  <- tail(na.omit(lift_max1_actual$weight_lbs), 1)
-last3  <- tail(na.omit(lift_max3_actual$weight_lbs), 1)
-last10 <- tail(na.omit(lift_max10_actual$weight_lbs), 1)
+# Helper: last observed value strictly BEFORE today
+get_last_before_today <- function(df) {
+  df$date <- as.Date(df$date)
+  df <- df[is.finite(df$weight_lbs) & df$date < today, ]
+  if (nrow(df) == 0) return(NA_real_)
+  df <- df[order(df$date), ]
+  tail(df$weight_lbs, 1)
+}
+
+# Helper: today's observed value (if any). If multiple today, take the max.
+get_observed_today <- function(df) {
+  df$date <- as.Date(df$date)
+  vals <- df$weight_lbs[is.finite(df$weight_lbs) & df$date == today]
+  if (!length(vals)) return(NA_real_)
+  max(vals, na.rm = TRUE)
+}
+
+# "Last" (previous workout, not today)
+last1  <- get_last_before_today(lift_max1_actual)
+last3  <- get_last_before_today(lift_max3_actual)
+last10 <- get_last_before_today(lift_max10_actual)
+
+# "Today" = observed today if present, else projected today
+obs1  <- get_observed_today(lift_max1_actual)
+obs3  <- get_observed_today(lift_max3_actual)
+obs10 <- get_observed_today(lift_max10_actual)
+
+today1  <- if (is.finite(obs1))  obs1  else pt1
+today3  <- if (is.finite(obs3))  obs3  else pt3
+today10 <- if (is.finite(obs10)) obs10 else pt10
 
 legend_table <- data.frame(
-  "Last Lift (lb)"       = c(round_up_2p5(last1), round_up_2p5(last3), round_up_2p5(last10)),
-  "Projected Today (lb)" = c(round_up_2p5(pt1),   round_up_2p5(pt3),   round_up_2p5(pt10)),
-  "Goal (lb)"            = c(round_up_2p5(g1),    round_up_2p5(g3),    round_up_2p5(g10))
+  "Last Lift (lb)" = c(round_up_2p5(last1),  round_up_2p5(last3),  round_up_2p5(last10)),
+  "Today (lb)"     = c(round_up_2p5(today1), round_up_2p5(today3), round_up_2p5(today10)),
+  "Goal (lb)"      = c(round_up_2p5(g1),     round_up_2p5(g3),     round_up_2p5(g10))
 )
+
+# Format numbers so whole numbers show as "400.0" (always 1 decimal)
+fmt_1dp <- function(x) {
+  ifelse(is.na(x), "NA", formatC(as.numeric(x), format = "f", digits = 1))
+}
 
 legend_labels <- apply(legend_table, 1, function(row)
-  sprintf("%8s  %8s  %8s", row[1], row[2], row[3])
+  sprintf("%8s  %8s  %8s", fmt_1dp(row[1]), fmt_1dp(row[2]), fmt_1dp(row[3]))
 )
 
+
 legend("bottomright",
-       legend = c("    Last:   Today:    Goal:  ", legend_labels),
+       legend = c("    Last:    Today:     Goal:  ", legend_labels),
        text.col = "black", cex = 0.9, bty = "n")
 
 legend("bottom",
@@ -436,71 +499,109 @@ legend("bottom",
 ###
 ### Plot predicted vs Actual for selected lift
 ###
-ymin <- min(c(lift_max1$weight_lbs, lift_max3$weight_lbs, lift_max10$weight_lbs,
-              lift_max1$predicted,  lift_max3$predicted,  lift_max10$predicted), na.rm = TRUE) - 50
-ymax <- max(c(g1, lift_max1$predicted, lift_max3$predicted, lift_max10$predicted), na.rm = TRUE) + 50
-
-plot(lift_max1$date, lift_max1$weight_lbs, 
-     col = "white",
-     ylim = c(ymin, ymax),
-     main = paste0(plot_name(lift), " Goal Progression: Actual vs Projected"),
-     xlab = "Date", ylab = "Weight lbs")
-
-grid(nx = NULL, ny = NULL, lty = 1, col = "gray", lwd = .5)
-
-lines(lift_max1$date,  lift_max1$predicted,  type = "l", lty = 1, lwd = 1, pch = 19, cex = .5, col = "darkgray")
-lines(lift_max3$date,  lift_max3$predicted,  type = "l", lty = 5, lwd = 1, pch = 19, cex = .5, col = "darkgray")
-lines(lift_max10$date, lift_max10$predicted, type = "l", lty = 3, lwd = 1, pch = 19, cex = .5, col = "darkgray")
-
-lines(lift_max1_actual$date,  lift_max1_actual$weight_lbs,  type = "o", lty = 1, lwd = 2, pch = 19, cex = .5, col = "black")
-lines(lift_max3_actual$date,  lift_max3_actual$weight_lbs,  type = "o", lty = 5, lwd = 2, pch = 19, cex = .5, col = "black")
-lines(lift_max10_actual$date, lift_max10_actual$weight_lbs, type = "o", lty = 3, lwd = 2, pch = 19, cex = .5, col = "black")
-
-points(today, pt1,  pch = 19, cex = 1, col = "firebrick")
-points(today, pt3,  pch = 19, cex = 1, col = "firebrick")
-points(today, pt10, pch = 19, cex = 1, col = "firebrick")
-
-points(gdate, g1,   pch = 15, cex = 1, col = "forestgreen")
-points(gdate, g3,   pch = 15, cex = 1, col = "forestgreen")
-points(gdate, g10,  pch = 15, cex = 1, col = "forestgreen")
-
-# Days remaining and days since last workout legend
-days_remaining   <- as.numeric(as.Date(date) - Sys.Date())
-last_workout_date <- max(workout_log[workout_log$lift == lift, "date", drop = TRUE], na.rm = TRUE)
-days_since_last   <- as.numeric(Sys.Date() - as.Date(last_workout_date))
-
-legend("topleft",
-       legend = c(paste0("Days Since Last Workout: ", days_since_last),
-                  paste0("Days Until Goal: ",       days_remaining)),
-       text.col = "black", cex = 0.9, bty = "n")
-
-# last, projected, and goal weights (rounded up to nearest 2.5 lb)
-round_up_2p5 <- function(x) {
-  ifelse(is.na(x), NA, ceiling(x / 2.5) * 2.5)
-}
-
-last1  <- tail(na.omit(lift_max1_actual$weight_lbs), 1)
-last3  <- tail(na.omit(lift_max3_actual$weight_lbs), 1)
-last10 <- tail(na.omit(lift_max10_actual$weight_lbs), 1)
-
-legend_table <- data.frame(
-  "Last Lift (lb)"       = c(round_up_2p5(last1), round_up_2p5(last3), round_up_2p5(last10)),
-  "Projected Today (lb)" = c(round_up_2p5(pt1),   round_up_2p5(pt3),   round_up_2p5(pt10)),
-  "Goal (lb)"            = c(round_up_2p5(g1),    round_up_2p5(g3),    round_up_2p5(g10))
-)
-
-legend_labels <- apply(legend_table, 1, function(row)
-  sprintf("%8s  %8s  %8s", row[1], row[2], row[3])
-)
-
-legend("bottomright",
-       legend = c("    Last:   Today:    Goal:  ", legend_labels),
-       text.col = "black", cex = 0.9, bty = "n")
-
-legend("bottom",
-       legend = c("  1 Rep:", "  3 Rep:", " 10 Rep:"),
-       col    = rep("black", 3),
-       lty    = c(1,5,3), lwd = rep(1, 3),
-       cex = 0.9, bty = "n")
-
+ ymin <- min(c(lift_max1$weight_lbs, lift_max3$weight_lbs, lift_max10$weight_lbs,
+               lift_max1$predicted,  lift_max3$predicted,  lift_max10$predicted), na.rm = TRUE) - 50
+ ymax <- max(c(g1, lift_max1$predicted, lift_max3$predicted, lift_max10$predicted), na.rm = TRUE) + 50
+ 
+ plot(lift_max1$date, lift_max1$weight_lbs, 
+      col = "white",
+      ylim = c(ymin, ymax),
+      main = paste0(plot_name(lift), " Goal Progression: Actual vs Projected"),
+      xlab = "Date", ylab = "Weight lbs")
+ 
+ grid(nx = NULL, ny = NULL, lty = 1, col = "gray", lwd = .5)
+ 
+ lines(lift_max1$date,  lift_max1$predicted,  type = "l", lty = 1, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+ lines(lift_max3$date,  lift_max3$predicted,  type = "l", lty = 5, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+ lines(lift_max10$date, lift_max10$predicted, type = "l", lty = 3, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+ 
+ lines(lift_max1_actual$date,  lift_max1_actual$weight_lbs,  type = "o", lty = 1, lwd = 2, pch = 19, cex = .5, col = "black")
+ lines(lift_max3_actual$date,  lift_max3_actual$weight_lbs,  type = "o", lty = 5, lwd = 2, pch = 19, cex = .5, col = "black")
+ lines(lift_max10_actual$date, lift_max10_actual$weight_lbs, type = "o", lty = 3, lwd = 2, pch = 19, cex = .5, col = "black")
+ 
+ if (show_today_projection) {
+   points(today, pt1,  pch = 19, cex = 1, col = "firebrick")
+   points(today, pt3,  pch = 19, cex = 1, col = "firebrick")
+   points(today, pt10, pch = 19, cex = 1, col = "firebrick")
+ }
+ 
+ points(gdate, g1,   pch = 15, cex = 1, col = "forestgreen")
+ points(gdate, g3,   pch = 15, cex = 1, col = "forestgreen")
+ points(gdate, g10,  pch = 15, cex = 1, col = "forestgreen")
+ 
+ # Days remaining and Days Since Last Recorded Workout legend
+ days_remaining    <- as.numeric(as.Date(date) - Sys.Date())
+ last_workout_date <- max(workout_log[workout_log$lift == lift, "date", drop = TRUE], na.rm = TRUE)
+ days_since_last   <- as.numeric(Sys.Date() - as.Date(last_workout_date))
+ 
+ days_since_label <- if (!is.finite(days_since_last)) {
+   "NA"
+ } else if (days_since_last == 0) {
+   "Today"
+ } else {
+   as.character(days_since_last)
+ }
+ 
+ legend("topleft",
+        legend = c(paste0("Days Since Last Recorded Workout: ", days_since_label),
+                   paste0("Days Until Goal: ",       days_remaining)),
+        text.col = "black", cex = 0.9, bty = "n")
+ 
+ # last, today (observed OR projected), and goal weights (rounded up to nearest 2.5 lb)
+ round_up_2p5 <- function(x) {
+   ifelse(is.na(x), NA, ceiling(x / 2.5) * 2.5)
+ }
+ 
+ # Helper: last observed value strictly BEFORE today
+ get_last_before_today <- function(df) {
+   df$date <- as.Date(df$date)
+   df <- df[is.finite(df$weight_lbs) & df$date < today, ]
+   if (nrow(df) == 0) return(NA_real_)
+   df <- df[order(df$date), ]
+   tail(df$weight_lbs, 1)
+ }
+ 
+ # Helper: today's observed value (if any). If multiple today, take the max.
+ get_observed_today <- function(df) {
+   df$date <- as.Date(df$date)
+   vals <- df$weight_lbs[is.finite(df$weight_lbs) & df$date == today]
+   if (!length(vals)) return(NA_real_)
+   max(vals, na.rm = TRUE)
+ }
+ 
+ # "Last" (previous workout, not today)
+ last1  <- get_last_before_today(lift_max1_actual)
+ last3  <- get_last_before_today(lift_max3_actual)
+ last10 <- get_last_before_today(lift_max10_actual)
+ 
+ # "Today" = observed today if present, else projected today
+ obs1  <- get_observed_today(lift_max1_actual)
+ obs3  <- get_observed_today(lift_max3_actual)
+ obs10 <- get_observed_today(lift_max10_actual)
+ 
+ today1  <- if (is.finite(obs1))  obs1  else pt1
+ today3  <- if (is.finite(obs3))  obs3  else pt3
+ today10 <- if (is.finite(obs10)) obs10 else pt10
+ 
+ legend_table <- data.frame(
+   "Last Lift (lb)" = c(round_up_2p5(last1),  round_up_2p5(last3),  round_up_2p5(last10)),
+   "Today (lb)"     = c(round_up_2p5(today1), round_up_2p5(today3), round_up_2p5(today10)),
+   "Goal (lb)"      = c(round_up_2p5(g1),     round_up_2p5(g3),     round_up_2p5(g10))
+ )
+ 
+ legend_labels <- apply(legend_table, 1, function(row)
+   sprintf("%8s  %8s  %8s", row[1], row[2], row[3])
+ )
+ 
+ legend("bottomright",
+        legend = c("    Last:   Today:    Goal:  ", legend_labels),
+        text.col = "black", cex = 0.9, bty = "n")
+ 
+ legend("bottom",
+        legend = c("  1 Rep:", "  3 Rep:", " 10 Rep:"),
+        col    = rep("black", 3),
+        lty    = c(1,5,3), lwd = rep(1, 3),
+        cex = 0.9, bty = "n")
+ 
 dev.off()
+
