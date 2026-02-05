@@ -346,10 +346,43 @@ g1  <- goal_1rm_anchor
 g3  <- est_nrm(g1, 3)
 g10 <- est_nrm(g1, 10)
 
+# Recovery multiplier based on days since last workout
+recovery_multiplier <- function(days_since_last,
+                                mult_min = 0.25,
+                                mult_max = 0.70,
+                                peak_day = 4,
+                                left_width = 2,   # how quickly it rises from very recent workouts
+                                right_width = 6   # how slowly it decays after the peak
+) {
+  # Handle edge cases
+  if (!is.finite(days_since_last)) return(mult_min)
+  d <- max(0, as.numeric(days_since_last))
+  
+  # Asymmetric “bump”: faster rise before peak, slower decay after peak
+  width <- if (d <= peak_day) left_width else right_width
+  score <- exp(-((d - peak_day) / width)^2)  # in (0,1], max at peak_day
+  
+  mult <- mult_min + (mult_max - mult_min) * score
+  
+  # Optional: small penalty if the gap is very large (extra conservative)
+  if (d >= 14) mult <- max(mult_min, mult * 0.5)
+  
+  mult
+}
+
+d1  <- get_days_since_last_observed(lift_max1_actual,  today)
+d3  <- get_days_since_last_observed(lift_max3_actual,  today)
+d10 <- get_days_since_last_observed(lift_max10_actual, today)
+
+m1  <- recovery_multiplier(d1)
+m3  <- recovery_multiplier(d3)
+m10 <- recovery_multiplier(d10)
+
+
 # Monotone, capped, and plate-rounded adjustment to today's projection
-lift_max1  <- adjust_projection(lift_max1,  goal_wt = g1,  k_actual = 3, mult = 0.75, min_step = 0, step_round = NULL)
-lift_max3  <- adjust_projection(lift_max3,  goal_wt = g3,  k_actual = 3, mult = 0.75, min_step = 0, step_round = NULL)
-lift_max10 <- adjust_projection(lift_max10, goal_wt = g10, k_actual = 3, mult = 0.75, min_step = 0, step_round = NULL)
+lift_max1  <- adjust_projection(lift_max1,  goal_wt = g1,  k_actual = 3, mult = m1, min_step = 0, step_round = NULL)
+lift_max3  <- adjust_projection(lift_max3,  goal_wt = g3,  k_actual = 3, mult = m3, min_step = 0, step_round = NULL)
+lift_max10 <- adjust_projection(lift_max10, goal_wt = g10, k_actual = 3, mult = m10, min_step = 0, step_round = NULL)
 
 
 # grab today's projections (fallback to nearest prior date if today not present)
