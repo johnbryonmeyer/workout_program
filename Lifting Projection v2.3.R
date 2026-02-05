@@ -376,6 +376,41 @@ pt1  <- get_today(lift_max1)
 pt3  <- get_today(lift_max3)
 pt10 <- get_today(lift_max10)
 
+# Smooth a model-based trajectory for plotting (does NOT change df$predicted)
+smooth_pred_path <- function(df, n = 250, spar = NULL, mono = TRUE) {
+  stopifnot(all(c("date", "predicted") %in% names(df)))
+  
+  x <- as.numeric(as.Date(df$date))
+  y <- as.numeric(df$predicted)
+  ok <- is.finite(x) & is.finite(y)
+  x <- x[ok]; y <- y[ok]
+  
+  # Need enough points to smooth
+  if (length(x) < 4) {
+    return(list(x = as.Date(x, origin = "1970-01-01"), y = y))
+  }
+  
+  # Ensure strictly increasing x (smooth.spline dislikes ties)
+  ord <- order(x)
+  x <- x[ord]; y <- y[ord]
+  keep <- !duplicated(x)
+  x <- x[keep]; y <- y[keep]
+  
+  x_grid <- seq(min(x), max(x), length.out = n)
+  
+  if (mono) {
+    # Monotone cubic interpolation (smooth-looking, preserves monotonicity)
+    f <- stats::splinefun(x, y, method = "monoH.FC")
+    y_grid <- f(x_grid)
+  } else {
+    # True smoothing spline (can wiggle, controlled by spar)
+    fit <- stats::smooth.spline(x, y, spar = spar)
+    y_grid <- stats::predict(fit, x_grid)$y
+  }
+  
+  list(x = as.Date(x_grid, origin = "1970-01-01"), y = y_grid)
+}
+
 ###
 ### Plot
 ###
@@ -395,9 +430,13 @@ plot(lift_max1$date, lift_max1$weight_lbs,
 
 grid(nx = NULL, ny = NULL, lty = 1, col = "gray", lwd = .5)
 
-lines(lift_max1$date,  lift_max1$predicted,  type = "l", lty = 1, lwd = 1, pch = 19, cex = .5, col = "darkgray")
-lines(lift_max3$date,  lift_max3$predicted,  type = "l", lty = 5, lwd = 1, pch = 19, cex = .5, col = "darkgray")
-lines(lift_max10$date, lift_max10$predicted, type = "l", lty = 3, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+p1  <- smooth_pred_path(lift_max1,  n = 250, mono = TRUE)
+p3  <- smooth_pred_path(lift_max3,  n = 250, mono = TRUE)
+p10 <- smooth_pred_path(lift_max10, n = 250, mono = TRUE)
+
+lines(p1$x,  p1$y,  lty = 1, lwd = 1, col = "darkgray")
+lines(p3$x,  p3$y,  lty = 5, lwd = 1, col = "darkgray")
+lines(p10$x, p10$y, lty = 3, lwd = 1, col = "darkgray")
 
 lines(lift_max1_actual$date,  lift_max1_actual$weight_lbs,  type = "o", lty = 1, lwd = 2, pch = 19, cex = .5, col = "black")
 lines(lift_max3_actual$date,  lift_max3_actual$weight_lbs,  type = "o", lty = 5, lwd = 2, pch = 19, cex = .5, col = "black")
@@ -511,9 +550,13 @@ legend("bottom",
  
  grid(nx = NULL, ny = NULL, lty = 1, col = "gray", lwd = .5)
  
- lines(lift_max1$date,  lift_max1$predicted,  type = "l", lty = 1, lwd = 1, pch = 19, cex = .5, col = "darkgray")
- lines(lift_max3$date,  lift_max3$predicted,  type = "l", lty = 5, lwd = 1, pch = 19, cex = .5, col = "darkgray")
- lines(lift_max10$date, lift_max10$predicted, type = "l", lty = 3, lwd = 1, pch = 19, cex = .5, col = "darkgray")
+ p1  <- smooth_pred_path(lift_max1,  n = 250, mono = TRUE)
+ p3  <- smooth_pred_path(lift_max3,  n = 250, mono = TRUE)
+ p10 <- smooth_pred_path(lift_max10, n = 250, mono = TRUE)
+ 
+ lines(p1$x,  p1$y,  lty = 1, lwd = 1, col = "darkgray")
+ lines(p3$x,  p3$y,  lty = 5, lwd = 1, col = "darkgray")
+ lines(p10$x, p10$y, lty = 3, lwd = 1, col = "darkgray")
  
  lines(lift_max1_actual$date,  lift_max1_actual$weight_lbs,  type = "o", lty = 1, lwd = 2, pch = 19, cex = .5, col = "black")
  lines(lift_max3_actual$date,  lift_max3_actual$weight_lbs,  type = "o", lty = 5, lwd = 2, pch = 19, cex = .5, col = "black")
@@ -604,4 +647,3 @@ legend("bottom",
         cex = 0.9, bty = "n")
  
 dev.off()
-
