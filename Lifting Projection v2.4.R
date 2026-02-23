@@ -429,6 +429,43 @@ ci1_leg  <- today_ci_legend(lift_max1)
 ci3_leg  <- today_ci_legend(lift_max3)
 ci10_leg <- today_ci_legend(lift_max10)
 
+####################################
+### Diagnostic Checks (optional) ###
+####################################
+
+diag_ci <- function(df, fit, label) {
+  n_obs <- sum(is.finite(df$weight_lbs) & as.Date(df$date) < Sys.Date())
+  i <- get_today_idx(df, today = Sys.Date())
+  
+  # mean-pred SE at today (what you are using)
+  se_today <- if (is.finite(i)) df$pred_se[i] else NA_real_
+  lo <- if (is.finite(i)) df$pred_lo[i] else NA_real_
+  hi <- if (is.finite(i)) df$pred_hi[i] else NA_real_
+  moe <- if (is.finite(lo) && is.finite(hi)) (hi - lo)/2 else NA_real_
+  
+  # model residual scale
+  sigma_like <- NA_real_
+  if (inherits(fit, "lm")) sigma_like <- summary(fit)$sigma
+  if (inherits(fit, "rlm")) {
+    # MASS::rlm stores scale; it’s not exactly lm sigma but good context
+    sigma_like <- fit$s
+  }
+  
+  data.frame(
+    series = label,
+    n_observed = n_obs,
+    sigma_like = sigma_like,
+    se_today = se_today,
+    moe_95_mean = moe
+  )
+}
+
+rbind(
+  diag_ci(lift_max1,  lift_max1_model,  "1RM"),
+  diag_ci(lift_max3,  lift_max3_model,  "3RM"),
+  diag_ci(lift_max10, lift_max10_model, "10RM")
+)
+
 ########################
 ### Smoothing helper ###
 ########################
