@@ -642,3 +642,11 @@ plot_goal_progress()
 
 # Save to file
 plot_goal_progress(file_path = file_path)
+
+# Print 
+
+cat("\nToday's Projected Lifts\n",
+  "------------------------\n",
+  "1 Rep Max :", round_to_2p5(pt1),  "lbs\n",
+  "3 Rep Max :", round_to_2p5(pt3),  "lbs\n",
+  "10 Rep Max:", round_to_2p5(pt10), "lbs\n\n")
